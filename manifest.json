@@ -3,7 +3,7 @@
 	"name": "Stellavault",
 	"version": "0.1.0",
 	"minAppVersion": "1.5.0",
-	"description": "Knowledge intelligence for Obsidian — semantic search, memory decay tracking, and learning paths powered by local AI embeddings.",
+	"description": "Knowledge intelligence — semantic search, memory decay tracking, and learning paths powered by local AI embeddings.",
 	"author": "Evanciel",
 	"authorUrl": "https://github.com/Evanciel",
 	"fundingUrl": "https://github.com/sponsors/Evanciel",
