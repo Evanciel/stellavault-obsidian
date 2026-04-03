@@ -1,0 +1,237 @@
+/* Stellavault Obsidian Plugin Styles */
+
+/* ── Search Modal ── */
+.sv-search-item {
+	padding: 6px 0;
+}
+
+.sv-search-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.sv-search-title {
+	font-weight: 600;
+	flex: 1;
+}
+
+.sv-search-score {
+	font-size: 0.75em;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-weight: 500;
+}
+
+.sv-score-high {
+	background: var(--background-modifier-success);
+	color: var(--text-on-accent);
+}
+
+.sv-score-mid {
+	background: var(--background-modifier-warning, #e5a00d);
+	color: var(--text-on-accent);
+}
+
+.sv-score-low {
+	color: var(--text-muted);
+}
+
+.sv-search-snippet {
+	color: var(--text-muted);
+	font-size: 0.85em;
+	margin-top: 2px;
+	line-height: 1.4;
+}
+
+.sv-search-tags {
+	display: flex;
+	gap: 4px;
+	margin-top: 4px;
+	flex-wrap: wrap;
+}
+
+.sv-tag {
+	font-size: 0.75em;
+	color: var(--text-accent);
+	background: var(--background-modifier-hover);
+	padding: 0 4px;
+	border-radius: 3px;
+}
+
+.sv-search-path {
+	color: var(--text-faint);
+	font-size: 0.75em;
+	margin-top: 2px;
+}
+
+/* ── Decay View ── */
+.sv-decay-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+}
+
+.sv-decay-header h4 {
+	margin: 0;
+}
+
+.sv-decay-refresh-btn {
+	font-size: 0.8em;
+}
+
+.sv-decay-stats {
+	display: flex;
+	gap: 12px;
+	padding: 4px 12px 8px;
+	font-size: 0.85em;
+}
+
+.sv-stat-critical {
+	color: var(--text-error);
+	font-weight: 600;
+}
+
+.sv-stat-warning {
+	color: var(--color-orange, #e5a00d);
+}
+
+.sv-decay-empty,
+.sv-decay-loading {
+	padding: 20px 12px;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.sv-decay-list {
+	padding: 0 8px;
+}
+
+.sv-decay-item {
+	padding: 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	margin-bottom: 4px;
+}
+
+.sv-decay-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.sv-decay-bar-container {
+	height: 3px;
+	background: var(--background-modifier-border);
+	border-radius: 2px;
+	overflow: hidden;
+	margin-bottom: 4px;
+}
+
+.sv-decay-bar {
+	height: 100%;
+	border-radius: 2px;
+	transition: width 0.3s ease;
+}
+
+.sv-bar-critical {
+	background: var(--text-error);
+}
+
+.sv-bar-warning {
+	background: var(--color-orange, #e5a00d);
+}
+
+.sv-bar-ok {
+	background: var(--text-accent);
+}
+
+.sv-decay-title {
+	display: flex;
+	justify-content: space-between;
+	font-size: 0.9em;
+}
+
+.sv-decay-pct {
+	color: var(--text-muted);
+	font-size: 0.85em;
+}
+
+.sv-decay-meta {
+	color: var(--text-faint);
+	font-size: 0.75em;
+	margin-top: 2px;
+}
+
+/* ── Learning Path Modal ── */
+.sv-learning-modal {
+	max-width: 600px;
+}
+
+.sv-learning-loading,
+.sv-learning-empty {
+	padding: 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.sv-learning-list {
+	padding: 8px 0;
+}
+
+.sv-learning-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 8px;
+	border-radius: 6px;
+}
+
+.sv-learning-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.sv-learning-step {
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: 50%;
+	font-weight: 600;
+	font-size: 0.85em;
+	flex-shrink: 0;
+}
+
+.sv-learning-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.sv-learning-title {
+	font-weight: 500;
+}
+
+.sv-learning-reason {
+	color: var(--text-muted);
+	font-size: 0.85em;
+	margin-top: 2px;
+}
+
+.sv-learning-open-btn {
+	flex-shrink: 0;
+}
+
+/* ── Settings ── */
+.sv-settings-status {
+	padding: 8px 0;
+}
+
+.sv-status-ok {
+	color: var(--text-accent);
+}
+
+.sv-status-warn {
+	color: var(--color-orange, #e5a00d);
+}
