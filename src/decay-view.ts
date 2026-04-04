@@ -57,9 +57,11 @@ export class DecayView extends ItemView {
 	private renderNotReady(): void {
 		const container = this.containerEl.children[1];
 		container.empty();
-		container.createDiv({
-			text: 'Stellavault is initializing...',
-			cls: 'sv-decay-loading',
+		const msg = container.createDiv({ cls: 'sv-decay-loading' });
+		msg.createEl('p', { text: 'Stellavault API server not connected.' });
+		msg.createEl('p', {
+			text: 'Run "npx stellavault graph" in your vault folder to start the server.',
+			cls: 'sv-decay-hint',
 		});
 	}
 

@@ -123,10 +123,13 @@ export default class StellavaultPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(async () => {
 			try {
 				await this.engine.init();
-				new Notice('Stellavault: Ready');
+				new Notice('Stellavault: Connected to API server');
 			} catch (err) {
 				console.error('[Stellavault]', err);
-				new Notice('Stellavault: Failed to initialize. Check console for details.');
+				new Notice(
+					'Stellavault: API server not found. Run "npx stellavault graph" in your vault folder.',
+					10000
+				);
 			}
 		});
 	}

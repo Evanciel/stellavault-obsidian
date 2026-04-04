@@ -44,7 +44,10 @@ export class StellavaultEngine {
     }
 
     throw new Error(
-      'Stellavault API server not found. Run `stellavault graph` or `stellavault serve` in terminal first.'
+      `Stellavault API server not found on port ${this.settings.apiPort ?? 3333}.\n\n` +
+      'To start the server, open a terminal in your vault folder and run:\n' +
+      '  npx stellavault graph\n\n' +
+      'Or change the port in Settings > Stellavault > API server port.'
     );
   }
 
