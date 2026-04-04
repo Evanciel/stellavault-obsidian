@@ -67,11 +67,11 @@ export class StellavaultEngine {
       const data = resp.json;
 
       return (data.results ?? []).map((r: any) => ({
-        filePath: r.document?.filePath ?? '',
-        title: r.document?.title ?? 'Untitled',
+        filePath: r.filePath ?? '',
+        title: r.title ?? 'Untitled',
         score: r.score ?? 0,
-        snippet: r.chunk?.content?.substring(0, 200) ?? '',
-        tags: r.document?.tags ?? [],
+        snippet: r.snippet ?? '',
+        tags: r.tags ?? [],
       }));
     } catch (err) {
       console.error('[Stellavault] Search failed:', err);
