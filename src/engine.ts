@@ -1,198 +1,178 @@
+import { requestUrl } from 'obsidian';
 import type { App } from 'obsidian';
 import type { StellavaultSettings, SearchResultItem, DecayItem } from './types';
 
 /**
- * Bridge between Obsidian vault and @stellavault/core.
- * Manages the SQLite vector store, embedder, and search engine lifecycle.
+ * HTTP-based bridge to Stellavault API server.
+ * Connects to `stellavault graph` or `stellavault serve --api` running locally.
+ * This avoids native module (better-sqlite3, sqlite-vec) issues in Obsidian's Electron.
  */
 export class StellavaultEngine {
-	private app: App;
-	private settings: StellavaultSettings;
-	private store: any = null;
-	private embedder: any = null;
-	private searchEngine: any = null;
-	private decayEngine: any = null;
-	private initialized = false;
-	private indexing = false;
+  private app: App;
+  private settings: StellavaultSettings;
+  private baseUrl: string;
+  private initialized = false;
 
-	constructor(app: App, settings: StellavaultSettings) {
-		this.app = app;
-		this.settings = settings;
-	}
+  constructor(app: App, settings: StellavaultSettings) {
+    this.app = app;
+    this.settings = settings;
+    this.baseUrl = `http://127.0.0.1:${settings.apiPort ?? 3333}`;
+  }
 
-	/** Initialize stellavault core components */
-	async init(): Promise<void> {
-		if (this.initialized) return;
+  /** Check if the API server is running */
+  async init(): Promise<void> {
+    if (this.initialized) return;
 
-		try {
-			// Dynamic import to handle missing dependency gracefully
-			const core = await import('stellavault');
+    try {
+      const resp = await requestUrl({ url: `${this.baseUrl}/api/stats` });
+      if (resp.status === 200) {
+        this.initialized = true;
+        return;
+      }
+    } catch {
+      // Server not running — try common ports
+      for (const port of [3333, 3334, 13333]) {
+        try {
+          const resp = await requestUrl({ url: `http://127.0.0.1:${port}/api/stats` });
+          if (resp.status === 200) {
+            this.baseUrl = `http://127.0.0.1:${port}`;
+            this.initialized = true;
+            return;
+          }
+        } catch { /* try next */ }
+      }
+    }
 
-			const vaultPath = (this.app.vault.adapter as any).basePath;
-			const dbPath = `${vaultPath}/.stellavault.db`;
+    throw new Error(
+      'Stellavault API server not found. Run `stellavault graph` or `stellavault serve` in terminal first.'
+    );
+  }
 
-			this.store = await core.createSqliteVecStore(dbPath);
-			this.embedder = await core.createLocalEmbedder();
-			this.searchEngine = core.createSearchEngine(this.store, this.embedder);
+  get isReady(): boolean {
+    return this.initialized;
+  }
 
-			// Initialize decay engine for memory tracking
-			this.decayEngine = new core.DecayEngine(this.store);
+  get isIndexing(): boolean {
+    return false; // Indexing is handled by the CLI
+  }
 
-			this.initialized = true;
-		} catch (err) {
-			console.error('[Stellavault] Failed to initialize engine:', err);
-			throw new Error(
-				'Could not initialize Stellavault. Make sure @stellavault/core is installed.'
-			);
-		}
-	}
+  /** Semantic + keyword hybrid search via API */
+  async search(query: string): Promise<SearchResultItem[]> {
+    if (!this.initialized) return [];
 
-	get isReady(): boolean {
-		return this.initialized;
-	}
+    try {
+      const resp = await requestUrl({
+        url: `${this.baseUrl}/api/search?q=${encodeURIComponent(query)}&limit=${this.settings.maxResults}`,
+      });
+      const data = resp.json;
 
-	get isIndexing(): boolean {
-		return this.indexing;
-	}
+      return (data.results ?? []).map((r: any) => ({
+        filePath: r.document?.filePath ?? '',
+        title: r.document?.title ?? 'Untitled',
+        score: r.score ?? 0,
+        snippet: r.chunk?.content?.substring(0, 200) ?? '',
+        tags: r.document?.tags ?? [],
+      }));
+    } catch (err) {
+      console.error('[Stellavault] Search failed:', err);
+      return [];
+    }
+  }
 
-	/** Index or re-index the entire vault */
-	async indexVault(onProgress?: (current: number, total: number) => void): Promise<number> {
-		if (!this.initialized) throw new Error('Engine not initialized');
-		if (this.indexing) return 0;
+  /** Get documents sorted by decay via API */
+  async getDecayingDocs(limit = 20): Promise<DecayItem[]> {
+    if (!this.initialized) return [];
 
-		this.indexing = true;
-		try {
-			const core = await import('stellavault');
-			const vaultPath = (this.app.vault.adapter as any).basePath;
+    try {
+      const resp = await requestUrl({ url: `${this.baseUrl}/api/decay` });
+      const data = resp.json;
 
-			const docs = await core.scanVault(vaultPath);
-			let indexed = 0;
+      return (data.topDecaying ?? []).slice(0, limit).map((item: any) => ({
+        filePath: item.filePath ?? '',
+        title: item.title ?? item.documentId ?? 'Untitled',
+        retrievability: item.retrievability ?? 0,
+        lastAccessed: item.lastAccess ?? '',
+        daysSinceAccess: item.daysSinceAccess ?? 0,
+      }));
+    } catch {
+      return [];
+    }
+  }
 
-			for (const doc of docs) {
-				const chunks = await core.chunkDocument(doc);
-				for (const chunk of chunks) {
-					const embedding = await this.embedder.embed(chunk.text);
-					await this.store.upsert({
-						id: chunk.id,
-						text: chunk.text,
-						embedding,
-						metadata: {
-							filePath: doc.filePath,
-							title: doc.title,
-							tags: doc.tags,
-						},
-					});
-				}
-				indexed++;
-				onProgress?.(indexed, docs.length);
-			}
+  /** Generate a learning path via API */
+  async getLearningPath(): Promise<any[]> {
+    if (!this.initialized) return [];
 
-			return indexed;
-		} finally {
-			this.indexing = false;
-		}
-	}
+    try {
+      const resp = await requestUrl({ url: `${this.baseUrl}/api/gaps` });
+      const data = resp.json;
 
-	/** Index a single file (for incremental updates) */
-	async indexFile(filePath: string): Promise<void> {
-		if (!this.initialized) return;
+      // Combine gaps + isolated nodes as learning suggestions
+      const items: any[] = [];
+      for (const gap of data.gaps ?? []) {
+        items.push({
+          type: 'bridge',
+          title: gap.suggestedTopic,
+          reason: `${gap.clusterA} ↔ ${gap.clusterB} 간 연결 부족`,
+          priority: gap.severity === 'high' ? 1 : gap.severity === 'medium' ? 2 : 3,
+        });
+      }
+      for (const node of (data.isolatedNodes ?? []).slice(0, 5)) {
+        items.push({
+          type: 'explore',
+          title: node.title,
+          reason: `고립된 노트 (${node.connections}개 연결)`,
+          priority: 2,
+        });
+      }
+      return items.sort((a, b) => a.priority - b.priority);
+    } catch {
+      return [];
+    }
+  }
 
-		try {
-			const core = await import('stellavault');
-			const vaultPath = (this.app.vault.adapter as any).basePath;
-			const fullPath = `${vaultPath}/${filePath}`;
+  /** Record document access via API */
+  async recordAccess(filePath: string): Promise<void> {
+    if (!this.initialized) return;
+    try {
+      // Find doc ID by file path, then hit the access endpoint
+      const resp = await requestUrl({
+        url: `${this.baseUrl}/api/search?q=${encodeURIComponent(filePath)}&limit=1`,
+      });
+      const data = resp.json;
+      const docId = data.results?.[0]?.document?.id;
+      if (docId) {
+        await requestUrl({ url: `${this.baseUrl}/api/document/${docId}` });
+      }
+    } catch {
+      // Silently fail — access tracking is non-critical
+    }
+  }
 
-			const docs = await core.scanVault(vaultPath, { files: [fullPath] });
-			if (docs.length === 0) return;
+  /** Index vault via API (trigger re-index) */
+  async indexVault(onProgress?: (current: number, total: number) => void): Promise<number> {
+    if (!this.initialized) return 0;
 
-			const doc = docs[0];
-			const chunks = await core.chunkDocument(doc);
+    try {
+      const resp = await requestUrl({ url: `${this.baseUrl}/api/graph/refresh` });
+      const data = resp.json;
+      return data.nodes?.length ?? 0;
+    } catch {
+      return 0;
+    }
+  }
 
-			for (const chunk of chunks) {
-				const embedding = await this.embedder.embed(chunk.text);
-				await this.store.upsert({
-					id: chunk.id,
-					text: chunk.text,
-					embedding,
-					metadata: {
-						filePath: doc.filePath,
-						title: doc.title,
-						tags: doc.tags,
-					},
-				});
-			}
-		} catch (err) {
-			console.error(`[Stellavault] Failed to index ${filePath}:`, err);
-		}
-	}
+  /** Index single file — not directly supported via API, use refresh */
+  async indexFile(_filePath: string): Promise<void> {
+    // Individual file indexing requires CLI. Skip in HTTP mode.
+  }
 
-	/** Semantic + keyword hybrid search */
-	async search(query: string): Promise<SearchResultItem[]> {
-		if (!this.initialized) return [];
+  async destroy(): Promise<void> {
+    this.initialized = false;
+  }
 
-		const results = await this.searchEngine.search(query, {
-			limit: this.settings.maxResults,
-		});
-
-		return results.map((r: any) => ({
-			filePath: r.metadata?.filePath ?? '',
-			title: r.metadata?.title ?? r.metadata?.filePath ?? 'Untitled',
-			score: r.score ?? 0,
-			snippet: r.text?.substring(0, 200) ?? '',
-			tags: r.metadata?.tags ?? [],
-		}));
-	}
-
-	/** Get documents sorted by decay (most forgotten first) */
-	async getDecayingDocs(limit = 20): Promise<DecayItem[]> {
-		if (!this.initialized || !this.decayEngine) return [];
-
-		try {
-			const items = await this.decayEngine.getDecayingItems(limit);
-			return items.map((item: any) => ({
-				filePath: item.filePath,
-				title: item.title ?? item.filePath,
-				retrievability: item.retrievability ?? 0,
-				lastAccessed: item.lastAccessed ?? '',
-				daysSinceAccess: item.daysSinceAccess ?? 0,
-			}));
-		} catch {
-			return [];
-		}
-	}
-
-	/** Generate a learning path based on decay and gaps */
-	async getLearningPath(): Promise<any[]> {
-		if (!this.initialized) return [];
-
-		try {
-			const core = await import('stellavault');
-			const path = await core.generateLearningPath(this.store, this.embedder);
-			return path?.items ?? [];
-		} catch {
-			return [];
-		}
-	}
-
-	/** Record that a document was accessed (for decay tracking) */
-	async recordAccess(filePath: string): Promise<void> {
-		if (!this.initialized || !this.decayEngine) return;
-		try {
-			await this.decayEngine.recordAccess(filePath);
-		} catch {
-			// Silently fail — decay is non-critical
-		}
-	}
-
-	/** Cleanup resources */
-	async destroy(): Promise<void> {
-		if (this.store?.close) {
-			await this.store.close();
-		}
-		this.initialized = false;
-	}
-
-	updateSettings(settings: StellavaultSettings): void {
-		this.settings = settings;
-	}
+  updateSettings(settings: StellavaultSettings): void {
+    this.settings = settings;
+    this.baseUrl = `http://127.0.0.1:${settings.apiPort ?? 3333}`;
+  }
 }

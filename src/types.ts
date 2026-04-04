@@ -9,6 +9,8 @@ export interface StellavaultSettings {
 	decayThreshold: number;
 	/** Language for UI */
 	locale: 'en' | 'ko' | 'ja';
+	/** API server port (default: 3333, set by `stellavault graph`) */
+	apiPort: number;
 }
 
 export const DEFAULT_SETTINGS: StellavaultSettings = {
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS: StellavaultSettings = {
 	showDecayBadges: true,
 	decayThreshold: 0.5,
 	locale: 'en',
+	apiPort: 3333,
 };
 
 export interface SearchResultItem {

@@ -84,6 +84,22 @@ export class StellavaultSettingTab extends PluginSettingTab {
 					})
 			);
 
+		new Setting(containerEl)
+			.setName('API server port')
+			.setDesc('Port of the Stellavault API server (run `stellavault graph` in terminal).')
+			.addText((text) =>
+				text
+					.setPlaceholder('3333')
+					.setValue(String(this.plugin.settings.apiPort))
+					.onChange(async (value) => {
+						const port = parseInt(value, 10);
+						if (port > 0 && port < 65536) {
+							this.plugin.settings.apiPort = port;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
 		// Status section
 		containerEl.createEl('h3', { text: 'Status' });
 
