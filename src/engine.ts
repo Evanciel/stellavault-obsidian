@@ -2,6 +2,12 @@ import { requestUrl } from 'obsidian';
 import type { App } from 'obsidian';
 import type { StellavaultSettings, SearchResultItem, DecayItem } from './types';
 
+/** Default timeout for API requests (10s). Long enough for cold-start embedder. */
+const API_TIMEOUT = 10000;
+
+/** Retry count for transient failures. */
+const MAX_RETRIES = 2;
+
 /**
  * HTTP-based bridge to Stellavault API server.
  * Connects to `stellavault graph` or `stellavault serve --api` running locally.
@@ -12,6 +18,8 @@ export class StellavaultEngine {
   private settings: StellavaultSettings;
   private baseUrl: string;
   private initialized = false;
+  private _isIndexing = false;
+  private _stats: { documentCount: number; chunkCount: number } | null = null;
 
   constructor(app: App, settings: StellavaultSettings) {
     this.app = app;
@@ -19,44 +27,67 @@ export class StellavaultEngine {
     this.baseUrl = `http://127.0.0.1:${settings.apiPort ?? 3333}`;
   }
 
+  /** Fetch with timeout + retry. Returns parsed JSON or throws. */
+  private async apiFetch(path: string, retries = MAX_RETRIES): Promise<any> {
+    const url = `${this.baseUrl}${path}`;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), API_TIMEOUT);
+        const resp = await requestUrl({ url });
+        clearTimeout(timer);
+        if (resp.status >= 200 && resp.status < 300) return resp.json;
+        throw new Error(`HTTP ${resp.status}`);
+      } catch (err: any) {
+        if (attempt === retries) throw err;
+        // Brief pause before retry
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+  }
+
   /** Check if the API server is running */
   async init(): Promise<void> {
     if (this.initialized) return;
 
-    try {
-      const resp = await requestUrl({ url: `${this.baseUrl}/api/stats` });
-      if (resp.status === 200) {
-        this.initialized = true;
-        return;
-      }
-    } catch {
-      // Server not running — try common ports
-      for (const port of [3333, 3334, 13333]) {
-        try {
-          const resp = await requestUrl({ url: `http://127.0.0.1:${port}/api/stats` });
-          if (resp.status === 200) {
-            this.baseUrl = `http://127.0.0.1:${port}`;
-            this.initialized = true;
-            return;
-          }
-        } catch { /* try next */ }
-      }
+    const ports = [
+      this.settings.apiPort ?? 3333,
+      3333, 3334, 13333,
+    ];
+    // Deduplicate
+    const uniquePorts = [...new Set(ports)];
+
+    for (const port of uniquePorts) {
+      try {
+        const url = `http://127.0.0.1:${port}/api/stats`;
+        const resp = await requestUrl({ url });
+        if (resp.status === 200) {
+          this.baseUrl = `http://127.0.0.1:${port}`;
+          this._stats = resp.json;
+          this.initialized = true;
+          return;
+        }
+      } catch { /* try next */ }
     }
 
     throw new Error(
-      `Stellavault API server not found on port ${this.settings.apiPort ?? 3333}.\n\n` +
-      'To start the server, open a terminal in your vault folder and run:\n' +
+      `Stellavault API server not found.\n\n` +
+      'Start the server in a terminal:\n' +
       '  npx stellavault graph\n\n' +
-      'Or change the port in Settings > Stellavault > API server port.'
+      `Tried ports: ${uniquePorts.join(', ')}\n` +
+      'Change the port in Settings → Stellavault → API server port.'
     );
   }
+
+  /** Cached stats from last init/refresh. */
+  get stats() { return this._stats; }
 
   get isReady(): boolean {
     return this.initialized;
   }
 
   get isIndexing(): boolean {
-    return false; // Indexing is handled by the CLI
+    return this._isIndexing;
   }
 
   /** Semantic + keyword hybrid search via API */
@@ -64,11 +95,9 @@ export class StellavaultEngine {
     if (!this.initialized) return [];
 
     try {
-      const resp = await requestUrl({
-        url: `${this.baseUrl}/api/search?q=${encodeURIComponent(query)}&limit=${this.settings.maxResults}`,
-      });
-      const data = resp.json;
-
+      const data = await this.apiFetch(
+        `/api/search?q=${encodeURIComponent(query)}&limit=${this.settings.maxResults}`
+      );
       return (data.results ?? []).map((r: any) => ({
         filePath: r.filePath ?? '',
         title: r.title ?? 'Untitled',
@@ -87,9 +116,7 @@ export class StellavaultEngine {
     if (!this.initialized) return [];
 
     try {
-      const resp = await requestUrl({ url: `${this.baseUrl}/api/decay` });
-      const data = resp.json;
-
+      const data = await this.apiFetch('/api/decay');
       return (data.topDecaying ?? []).slice(0, limit).map((item: any) => ({
         filePath: item.filePath ?? '',
         title: item.title ?? item.documentId ?? 'Untitled',
@@ -107,16 +134,13 @@ export class StellavaultEngine {
     if (!this.initialized) return [];
 
     try {
-      const resp = await requestUrl({ url: `${this.baseUrl}/api/gaps` });
-      const data = resp.json;
-
-      // Combine gaps + isolated nodes as learning suggestions
+      const data = await this.apiFetch('/api/gaps');
       const items: any[] = [];
       for (const gap of data.gaps ?? []) {
         items.push({
           type: 'bridge',
           title: gap.suggestedTopic,
-          reason: `${gap.clusterA} ↔ ${gap.clusterB} 간 연결 부족`,
+          reason: `Weak link between "${gap.clusterA}" and "${gap.clusterB}"`,
           priority: gap.severity === 'high' ? 1 : gap.severity === 'medium' ? 2 : 3,
         });
       }
@@ -124,7 +148,7 @@ export class StellavaultEngine {
         items.push({
           type: 'explore',
           title: node.title,
-          reason: `고립된 노트 (${node.connections}개 연결)`,
+          reason: `Isolated note (${node.connections} connections)`,
           priority: 2,
         });
       }
@@ -138,34 +162,34 @@ export class StellavaultEngine {
   async recordAccess(filePath: string): Promise<void> {
     if (!this.initialized) return;
     try {
-      // Find doc ID by file path, then hit the access endpoint
-      const resp = await requestUrl({
-        url: `${this.baseUrl}/api/search?q=${encodeURIComponent(filePath)}&limit=1`,
-      });
-      const data = resp.json;
+      const data = await this.apiFetch(
+        `/api/search?q=${encodeURIComponent(filePath)}&limit=1`, 0
+      );
       const docId = data.results?.[0]?.document?.id;
       if (docId) {
-        await requestUrl({ url: `${this.baseUrl}/api/document/${docId}` });
+        await this.apiFetch(`/api/document/${docId}`, 0);
       }
     } catch {
-      // Silently fail — access tracking is non-critical
+      // Non-critical — silently fail
     }
   }
 
-  /** Index vault via API (trigger re-index) */
-  async indexVault(onProgress?: (current: number, total: number) => void): Promise<number> {
+  /** Trigger vault re-index via API */
+  async indexVault(): Promise<number> {
     if (!this.initialized) return 0;
+    this._isIndexing = true;
 
     try {
-      const resp = await requestUrl({ url: `${this.baseUrl}/api/graph/refresh` });
-      const data = resp.json;
-      return data.nodes?.length ?? 0;
+      const data = await this.apiFetch('/api/reindex', 0);
+      return data.indexed ?? data.nodes?.length ?? 0;
     } catch {
       return 0;
+    } finally {
+      this._isIndexing = false;
     }
   }
 
-  /** Index single file — not directly supported via API, use refresh */
+  /** Index single file — not directly supported via API */
   async indexFile(_filePath: string): Promise<void> {
     // Individual file indexing requires CLI. Skip in HTTP mode.
   }
