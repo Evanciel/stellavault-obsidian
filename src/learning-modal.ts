@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import type { StellavaultEngine } from './engine';
+import type { StellavaultEngine, LearningPathItem } from './engine';
 
 /**
  * Modal showing a personalized learning path based on
@@ -18,7 +18,7 @@ export class LearningPathModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('sv-learning-modal');
 
-		contentEl.createEl('h2', { text: 'Your Learning Path' });
+		contentEl.createEl('h2', { text: 'Your learning path' });
 
 		const loading = contentEl.createDiv({
 			text: 'Analyzing your knowledge...',
@@ -65,18 +65,21 @@ export class LearningPathModal extends Modal {
 
 				// Open button
 				if (item.filePath) {
+					const filePath = item.filePath;
 					const openBtn = row.createEl('button', {
 						text: 'Review',
 						cls: 'sv-learning-open-btn',
 					});
-					openBtn.addEventListener('click', async () => {
-						this.close();
-						await this.app.workspace.openLinkText(item.filePath, '', false);
-						await this.engine.recordAccess(item.filePath);
+					openBtn.addEventListener('click', () => {
+						void (async () => {
+							this.close();
+							await this.app.workspace.openLinkText(filePath, '', false);
+							await this.engine.recordAccess(filePath);
+						})();
 					});
 				}
 			}
-		} catch (err) {
+		} catch (_err) {
 			loading.setText('Failed to generate learning path. Is your vault indexed?');
 		}
 	}

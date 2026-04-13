@@ -13,7 +13,7 @@ export class StellavaultSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Stellavault Settings' });
+		new Setting(containerEl).setName('Stellavault settings').setHeading();
 
 		new Setting(containerEl)
 			.setName('Auto-index on file changes')
@@ -101,7 +101,7 @@ export class StellavaultSettingTab extends PluginSettingTab {
 			);
 
 		// Status section
-		containerEl.createEl('h3', { text: 'Status' });
+		new Setting(containerEl).setName('Status').setHeading();
 
 		const statusEl = containerEl.createDiv({ cls: 'sv-settings-status' });
 

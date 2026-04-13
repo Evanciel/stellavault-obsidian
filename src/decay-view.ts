@@ -23,7 +23,7 @@ export class DecayView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Memory Decay';
+		return 'Memory decay';
 	}
 
 	getIcon(): string {
@@ -34,9 +34,10 @@ export class DecayView extends ItemView {
 		await this.refresh();
 
 		// Auto-refresh every 5 minutes
-		this.refreshTimer = setInterval(() => this.refresh(), 5 * 60 * 1000);
+		this.refreshTimer = setInterval(() => { void this.refresh(); }, 5 * 60 * 1000);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async onClose(): Promise<void> {
 		if (this.refreshTimer) {
 			clearInterval(this.refreshTimer);
@@ -71,13 +72,13 @@ export class DecayView extends ItemView {
 
 		// Header
 		const header = container.createDiv({ cls: 'sv-decay-header' });
-		header.createEl('h4', { text: 'Memory Decay' });
+		header.createEl('h4', { text: 'Memory decay' });
 
 		const refreshBtn = header.createEl('button', {
 			text: 'Refresh',
 			cls: 'sv-decay-refresh-btn',
 		});
-		refreshBtn.addEventListener('click', () => this.refresh());
+		refreshBtn.addEventListener('click', () => { void this.refresh(); });
 
 		if (this.items.length === 0) {
 			container.createDiv({
@@ -132,12 +133,14 @@ export class DecayView extends ItemView {
 		});
 
 		// Click to open
-		el.addEventListener('click', async () => {
-			await this.app.workspace.openLinkText(item.filePath, '', false);
-			await this.engine.recordAccess(item.filePath);
-			// Update this item's display
-			item.retrievability = Math.min(1, item.retrievability + 0.1);
-			this.render();
+		el.addEventListener('click', () => {
+			void (async () => {
+				await this.app.workspace.openLinkText(item.filePath, '', false);
+				await this.engine.recordAccess(item.filePath);
+				// Update this item's display
+				item.retrievability = Math.min(1, item.retrievability + 0.1);
+				this.render();
+			})();
 		});
 	}
 }

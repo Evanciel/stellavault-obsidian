@@ -27,7 +27,7 @@ export default class StellavaultPlugin extends Plugin {
 
 		// Commands
 		this.addCommand({
-			id: 'stellavault-search',
+			id: 'search',
 			name: 'Search knowledge base',
 			callback: () => {
 				if (!this.engine.isReady) {
@@ -39,7 +39,7 @@ export default class StellavaultPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'stellavault-index',
+			id: 'index',
 			name: 'Index vault',
 			callback: async () => {
 				if (!this.engine.isReady) {
@@ -50,24 +50,20 @@ export default class StellavaultPlugin extends Plugin {
 					new Notice('Indexing already in progress...');
 					return;
 				}
-				new Notice('Stellavault: Indexing started...');
-				const count = await this.engine.indexVault((current, total) => {
-					if (current % 50 === 0) {
-						new Notice(`Indexing: ${current}/${total}`);
-					}
-				});
-				new Notice(`Stellavault: Indexed ${count} documents`);
+				new Notice('Stellavault: indexing started...');
+				const count = await this.engine.indexVault();
+				new Notice(`Stellavault: indexed ${count} documents`);
 			},
 		});
 
 		this.addCommand({
-			id: 'stellavault-decay',
+			id: 'decay',
 			name: 'Show memory decay panel',
-			callback: () => this.activateDecayView(),
+			callback: () => { void this.activateDecayView(); },
 		});
 
 		this.addCommand({
-			id: 'stellavault-learn',
+			id: 'learn',
 			name: 'Show learning path',
 			callback: () => {
 				if (!this.engine.isReady) {
@@ -82,7 +78,7 @@ export default class StellavaultPlugin extends Plugin {
 		this.addSettingTab(new StellavaultSettingTab(this.app, this));
 
 		// Ribbon icon
-		this.addRibbonIcon('brain', 'Stellavault: Search', () => {
+		this.addRibbonIcon('brain', 'Stellavault: search', () => {
 			if (this.engine.isReady) {
 				new StellavaultSearchModal(this.app, this.engine).open();
 			} else {
@@ -114,28 +110,30 @@ export default class StellavaultPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
-					this.engine.recordAccess(file.path);
+					void this.engine.recordAccess(file.path);
 				}
 			})
 		);
 
 		// Initialize engine after layout is ready
-		this.app.workspace.onLayoutReady(async () => {
-			try {
-				await this.engine.init();
-				new Notice('Stellavault: Connected to API server');
-			} catch (err) {
-				console.error('[Stellavault]', err);
-				new Notice(
-					'Stellavault: API server not found. Run "npx stellavault graph" in your vault folder.',
-					10000
-				);
-			}
+		this.app.workspace.onLayoutReady(() => {
+			void (async () => {
+				try {
+					await this.engine.init();
+					new Notice('Stellavault: connected to API server');
+				} catch (err) {
+					console.error('[Stellavault]', err);
+					new Notice(
+						'Stellavault: API server not found. Run "npx stellavault graph" in your vault folder.',
+						10000
+					);
+				}
+			})();
 		});
 	}
 
-	async onunload(): Promise<void> {
-		await this.engine?.destroy();
+	onunload(): void {
+		this.engine?.destroy();
 	}
 
 	async loadSettings(): Promise<void> {

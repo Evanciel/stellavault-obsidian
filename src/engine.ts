@@ -2,6 +2,49 @@ import { requestUrl } from 'obsidian';
 import type { App } from 'obsidian';
 import type { StellavaultSettings, SearchResultItem, DecayItem } from './types';
 
+/** Shape of a single result from the search API. */
+interface ApiSearchResult {
+  filePath?: string;
+  title?: string;
+  score?: number;
+  snippet?: string;
+  tags?: string[];
+  document?: { id?: string };
+}
+
+/** Shape of a single item from the decay API. */
+interface ApiDecayResult {
+  filePath?: string;
+  title?: string;
+  documentId?: string;
+  retrievability?: number;
+  lastAccess?: string;
+  daysSinceAccess?: number;
+}
+
+/** Shape of a gap item from the gaps API. */
+interface ApiGapItem {
+  suggestedTopic?: string;
+  clusterA?: string;
+  clusterB?: string;
+  severity?: string;
+}
+
+/** Shape of an isolated node from the gaps API. */
+interface ApiIsolatedNode {
+  title?: string;
+  connections?: number;
+}
+
+/** A single item in the learning path. */
+export interface LearningPathItem {
+  type: string;
+  title?: string;
+  filePath?: string;
+  reason?: string;
+  priority: number;
+}
+
 /** Default timeout for API requests (10s). Long enough for cold-start embedder. */
 const API_TIMEOUT = 10000;
 
@@ -28,7 +71,7 @@ export class StellavaultEngine {
   }
 
   /** Fetch with timeout + retry. Returns parsed JSON or throws. */
-  private async apiFetch(path: string, retries = MAX_RETRIES): Promise<any> {
+  private async apiFetch(path: string, retries = MAX_RETRIES): Promise<unknown> {
     const url = `${this.baseUrl}${path}`;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -38,7 +81,7 @@ export class StellavaultEngine {
         clearTimeout(timer);
         if (resp.status >= 200 && resp.status < 300) return resp.json;
         throw new Error(`HTTP ${resp.status}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (attempt === retries) throw err;
         // Brief pause before retry
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
@@ -63,7 +106,7 @@ export class StellavaultEngine {
         const resp = await requestUrl({ url });
         if (resp.status === 200) {
           this.baseUrl = `http://127.0.0.1:${port}`;
-          this._stats = resp.json;
+          this._stats = resp.json as { documentCount: number; chunkCount: number };
           this.initialized = true;
           return;
         }
@@ -97,8 +140,8 @@ export class StellavaultEngine {
     try {
       const data = await this.apiFetch(
         `/api/search?q=${encodeURIComponent(query)}&limit=${this.settings.maxResults}`
-      );
-      return (data.results ?? []).map((r: any) => ({
+      ) as { results?: ApiSearchResult[] };
+      return (data.results ?? []).map((r) => ({
         filePath: r.filePath ?? '',
         title: r.title ?? 'Untitled',
         score: r.score ?? 0,
@@ -116,8 +159,8 @@ export class StellavaultEngine {
     if (!this.initialized) return [];
 
     try {
-      const data = await this.apiFetch('/api/decay');
-      return (data.topDecaying ?? []).slice(0, limit).map((item: any) => ({
+      const data = await this.apiFetch('/api/decay') as { topDecaying?: ApiDecayResult[] };
+      return (data.topDecaying ?? []).slice(0, limit).map((item) => ({
         filePath: item.filePath ?? '',
         title: item.title ?? item.documentId ?? 'Untitled',
         retrievability: item.retrievability ?? 0,
@@ -130,12 +173,15 @@ export class StellavaultEngine {
   }
 
   /** Generate a learning path via API */
-  async getLearningPath(): Promise<any[]> {
+  async getLearningPath(): Promise<LearningPathItem[]> {
     if (!this.initialized) return [];
 
     try {
-      const data = await this.apiFetch('/api/gaps');
-      const items: any[] = [];
+      const data = await this.apiFetch('/api/gaps') as {
+        gaps?: ApiGapItem[];
+        isolatedNodes?: ApiIsolatedNode[];
+      };
+      const items: LearningPathItem[] = [];
       for (const gap of data.gaps ?? []) {
         items.push({
           type: 'bridge',
@@ -164,7 +210,7 @@ export class StellavaultEngine {
     try {
       const data = await this.apiFetch(
         `/api/search?q=${encodeURIComponent(filePath)}&limit=1`, 0
-      );
+      ) as { results?: ApiSearchResult[] };
       const docId = data.results?.[0]?.document?.id;
       if (docId) {
         await this.apiFetch(`/api/document/${docId}`, 0);
@@ -180,7 +226,10 @@ export class StellavaultEngine {
     this._isIndexing = true;
 
     try {
-      const data = await this.apiFetch('/api/reindex', 0);
+      const data = await this.apiFetch('/api/reindex', 0) as {
+        indexed?: number;
+        nodes?: unknown[];
+      };
       return data.indexed ?? data.nodes?.length ?? 0;
     } catch {
       return 0;
@@ -194,7 +243,7 @@ export class StellavaultEngine {
     // Individual file indexing requires CLI. Skip in HTTP mode.
   }
 
-  async destroy(): Promise<void> {
+  destroy(): void {
     this.initialized = false;
   }
 

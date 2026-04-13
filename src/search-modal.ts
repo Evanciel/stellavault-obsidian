@@ -27,13 +27,15 @@ export class StellavaultSearchModal extends SuggestModal<SearchResultItem> {
 		// Debounce: wait 200ms after last keystroke
 		return new Promise((resolve) => {
 			if (this.debounceTimer) clearTimeout(this.debounceTimer);
-			this.debounceTimer = setTimeout(async () => {
-				try {
-					this.lastResults = await this.engine.search(query);
-					resolve(this.lastResults);
-				} catch {
-					resolve([]);
-				}
+			this.debounceTimer = setTimeout(() => {
+				void (async () => {
+					try {
+						this.lastResults = await this.engine.search(query);
+						resolve(this.lastResults);
+					} catch {
+						resolve([]);
+					}
+				})();
 			}, 200);
 		});
 	}
@@ -73,12 +75,14 @@ export class StellavaultSearchModal extends SuggestModal<SearchResultItem> {
 		});
 	}
 
-	async onChooseSuggestion(item: SearchResultItem): Promise<void> {
+	onChooseSuggestion(item: SearchResultItem): void {
 		const file = this.app.vault.getAbstractFileByPath(item.filePath);
 		if (file) {
-			await this.app.workspace.openLinkText(item.filePath, '', false);
-			// Record access for decay tracking
-			await this.engine.recordAccess(item.filePath);
+			void (async () => {
+				await this.app.workspace.openLinkText(item.filePath, '', false);
+				// Record access for decay tracking
+				await this.engine.recordAccess(item.filePath);
+			})();
 		}
 	}
 }
