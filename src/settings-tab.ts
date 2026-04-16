@@ -13,7 +13,7 @@ export class StellavaultSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName('Stellavault settings').setHeading();
+		new Setting(containerEl).setName('General').setHeading();
 
 		new Setting(containerEl)
 			.setName('Auto-index on file changes')
@@ -71,7 +71,7 @@ export class StellavaultSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Language')
-			.setDesc('UI language for Stellavault.')
+			.setDesc('UI language for the plugin.')
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption('en', 'English')

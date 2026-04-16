@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import type { StellavaultEngine, LearningPathItem } from './engine';
+import type { StellavaultEngine } from './engine';
 
 /**
  * Modal showing a personalized learning path based on
@@ -79,7 +79,7 @@ export class LearningPathModal extends Modal {
 					});
 				}
 			}
-		} catch (_err) {
+		} catch {
 			loading.setText('Failed to generate learning path. Is your vault indexed?');
 		}
 	}

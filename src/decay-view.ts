@@ -37,7 +37,7 @@ export class DecayView extends ItemView {
 		this.refreshTimer = setInterval(() => { void this.refresh(); }, 5 * 60 * 1000);
 	}
 
-	// eslint-disable-next-line @typescript-eslint/require-await
+	// eslint-disable-next-line @typescript-eslint/require-await -- Obsidian's ItemView.onClose() requires async signature but cleanup here is synchronous
 	async onClose(): Promise<void> {
 		if (this.refreshTimer) {
 			clearInterval(this.refreshTimer);
